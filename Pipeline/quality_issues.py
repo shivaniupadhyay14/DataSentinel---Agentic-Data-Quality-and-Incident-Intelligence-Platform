@@ -10,21 +10,48 @@ CSV_PATH = r"C:\Users\user\Desktop\Datasentinel\data\raw\PS_20174392719_14912044
 
 def get_raw_data():
     print("Reading full CSV file. This covers all 744 steps, so it takes a bit longer.")
-    full_df = pd.read_csv(CSV_PATH)
-    print(f"Full dataset: {len(full_df):,} rows, step range {full_df['step'].min()} to {full_df['step'].max()}")
 
-    df = full_df.sample(n=500000, random_state=1).reset_index(drop=True)
-    print(f"Sampled: {len(df):,} rows, step range {df['step'].min()} to {df['step'].max()}")
+    full_df = pd.read_csv(CSV_PATH)
+
+    print(
+        f"Full dataset: {len(full_df):,} rows, "
+        f"step range {full_df['step'].min()} to {full_df['step'].max()}"
+    )
+
+    # Stratified sampling by day
+    full_df["day_bucket"] = full_df["step"] // 24
+
+    target_total = 500000
+    days_count = full_df["day_bucket"].nunique()
+    per_day_target = target_total // days_count
+
+    df = (
+        full_df.groupby("day_bucket", group_keys=False)
+        .apply(
+            lambda x: x.sample(
+                n=min(len(x), per_day_target),
+                random_state=1
+            )
+        )
+        .reset_index(drop=True)
+    )
+
+    df = df.drop(columns=["day_bucket"])
+
+    print(
+        f"Sampled: {len(df):,} rows, "
+        f"step range {df['step'].min()} to {df['step'].max()}"
+    )
 
     df = df.rename(columns={
-        'type':           'transaction_type',
-        'nameOrig':       'customer_origin',
-        'oldbalanceOrg':  'balance_origin_before',
+        'type': 'transaction_type',
+        'nameOrig': 'customer_origin',
+        'oldbalanceOrg': 'balance_origin_before',
         'newbalanceOrig': 'balance_origin_after',
-        'nameDest':       'customer_dest',
+        'nameDest': 'customer_dest',
         'oldbalanceDest': 'balance_dest_before',
         'newbalanceDest': 'balance_dest_after',
-        'isFraud':        'is_fraud',
+        'isFraud': 'is_fraud',
         'isFlaggedFraud': 'is_flagged_fraud'
     })
 
@@ -57,44 +84,100 @@ def issue_2_schema_drift(df):
 
 def issue_3_duplicates(df, dupe_rate=0.008):
     n_dupes = int(len(df) * dupe_rate)
-    dupe_rows = df.sample(n=n_dupes, random_state=42).copy()
-    dupe_rows['transaction_id'] = [str(uuid.uuid4()) for _ in range(n_dupes)]
-    result = pd.concat([df, dupe_rows], ignore_index=True)
-    print(f"Issue 3 — Duplicates: {n_dupes:,} duplicate rows inserted")
+
+    dupe_rows = df.sample(
+        n=n_dupes,
+        random_state=42
+    ).copy()
+
+    dupe_rows['transaction_id'] = [
+        str(uuid.uuid4()) for _ in range(n_dupes)
+    ]
+
+    result = pd.concat(
+        [df, dupe_rows],
+        ignore_index=True
+    )
+
+    print(
+        f"Issue 3 — Duplicates: "
+        f"{n_dupes:,} duplicate rows inserted"
+    )
+
     return result
 
 
 def issue_4_value_anomaly(df):
     df = df.copy()
-    anomaly_idx = df.sample(n=200, random_state=99).index
-    df.loc[anomaly_idx, 'amount'] = df.loc[anomaly_idx, 'amount'] * 1000
-    print(f"Issue 4 — Value anomaly: 200 transactions with 1000x amounts")
+
+    anomaly_idx = df.sample(
+        n=200,
+        random_state=99
+    ).index
+
+    df.loc[anomaly_idx, 'amount'] = (
+        df.loc[anomaly_idx, 'amount'] * 1000
+    )
+
+    print(
+        "Issue 4 — Value anomaly: "
+        "200 transactions with 1000x amounts"
+    )
+
     return df
 
 
 def issue_5_referential_integrity(df):
     df = df.copy()
-    bad_idx = df.sample(n=500, random_state=77).index
-    df.loc[bad_idx, 'customer_dest'] = 'MERCHANT_DELETED_' + bad_idx.astype(str)
-    print(f"Issue 5 — Referential integrity: 500 orphaned merchant refs")
+
+    bad_idx = df.sample(
+        n=500,
+        random_state=77
+    ).index
+
+    df.loc[bad_idx, 'customer_dest'] = (
+        'MERCHANT_DELETED_' + bad_idx.astype(str)
+    )
+
+    print(
+        "Issue 5 — Referential integrity: "
+        "500 orphaned merchant refs"
+    )
+
     return df
 
 
 def issue_6_freshness_failure(df):
     df = df.copy()
+
     max_step = df['step'].max()
+
     stale_mask = df['step'] > (max_step - 48)
+
     removed = stale_mask.sum()
+
     df = df[~stale_mask].copy()
-    print(f"Issue 6 — Freshness failure: {removed:,} recent rows missing")
+
+    print(
+        f"Issue 6 — Freshness failure: "
+        f"{removed:,} recent rows missing"
+    )
+
     return df
 
 
 def add_transformation_columns(df):
     df = df.copy()
 
-    df['balance_delta_origin'] = df['balance_origin_after'] - df['balance_origin_before']
-    df['balance_delta_dest'] = df['balance_dest_after'] - df['balance_dest_before']
+    df['balance_delta_origin'] = (
+        df['balance_origin_after']
+        - df['balance_origin_before']
+    )
+
+    df['balance_delta_dest'] = (
+        df['balance_dest_after']
+        - df['balance_dest_before']
+    )
 
     df['amount_bucket'] = pd.cut(
         df['amount'],
@@ -103,7 +186,11 @@ def add_transformation_columns(df):
     ).astype(str)
 
     df['is_balance_mismatch'] = (
-        abs(df['balance_origin_before'] - df['balance_origin_after'] - df['amount']) > 0.01
+        abs(
+            df['balance_origin_before']
+            - df['balance_origin_after']
+            - df['amount']
+        ) > 0.01
     )
 
     df['transformed_at'] = datetime.now(timezone.utc)
@@ -116,6 +203,7 @@ def build_transformed_table():
     print("\nBuilding transformed_transactions table...\n")
 
     df = get_raw_data()
+
     print(f"Raw data: {len(df):,} rows\n")
 
     df = issue_1_silent_row_drop(df)
@@ -128,33 +216,58 @@ def build_transformed_table():
     df = add_transformation_columns(df)
 
     columns = [
-        'transaction_id', 'step', 'transaction_type', 'amount',
-        'amount_bucket', 'customer_origin', 'customer_dest',
-        'balance_delta_origin', 'balance_delta_dest',
-        'is_fraud', 'is_flagged_fraud', 'is_balance_mismatch',
-        'transformed_at', 'pipeline_version'
+        'transaction_id',
+        'step',
+        'transaction_type',
+        'amount',
+        'amount_bucket',
+        'customer_origin',
+        'customer_dest',
+        'balance_delta_origin',
+        'balance_delta_dest',
+        'is_fraud',
+        'is_flagged_fraud',
+        'is_balance_mismatch',
+        'transformed_at',
+        'pipeline_version'
     ]
+
     df = df[columns]
 
     con = duckdb.connect(DB_PATH)
+
     con.register('df_view', df)
+
     con.execute("DELETE FROM transformed_transactions")
+
     con.execute("""
         INSERT INTO transformed_transactions
         SELECT
-            transaction_id, step, transaction_type, amount,
-            amount_bucket, customer_origin, customer_dest,
-            balance_delta_origin, balance_delta_dest,
-            is_fraud, is_flagged_fraud, is_balance_mismatch,
-            transformed_at, pipeline_version
+            transaction_id,
+            step,
+            transaction_type,
+            amount,
+            amount_bucket,
+            customer_origin,
+            customer_dest,
+            balance_delta_origin,
+            balance_delta_dest,
+            is_fraud,
+            is_flagged_fraud,
+            is_balance_mismatch,
+            transformed_at,
+            pipeline_version
         FROM df_view
     """)
 
-    count = con.execute("SELECT COUNT(*) FROM transformed_transactions").fetchone()[0]
+    count = con.execute(
+        "SELECT COUNT(*) FROM transformed_transactions"
+    ).fetchone()[0]
+
     con.close()
 
     print(f"\nTransformed table loaded: {count:,} rows")
-    print(f"Issues planted: 6/6\n")
+    print("Issues planted: 6/6\n")
 
 
 if __name__ == "__main__":

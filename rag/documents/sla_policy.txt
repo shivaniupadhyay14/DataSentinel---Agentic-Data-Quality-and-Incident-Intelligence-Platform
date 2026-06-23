@@ -1,0 +1,43 @@
+DataSentinel Internal Policy — Data SLA and Quality Standards
+Version 2.1 | Effective January 2024
+
+PIPELINE FRESHNESS STANDARDS
+All production payment pipelines must deliver data within 4 hours of 
+the source timestamp. Any gap exceeding 6 hours is classified as a 
+P1 incident requiring immediate escalation to the data engineering 
+lead and VP of Engineering.
+
+Freshness is measured as the difference between the latest record 
+timestamp in the transformed layer and the current system time. 
+Dashboards displaying data older than 6 hours must show a visible 
+staleness warning to all viewers.
+
+DATA VOLUME STANDARDS
+Daily transaction volume is expected to remain within 20% of the 
+30-day rolling average. A deviation greater than 20% downward triggers 
+a P2 alert. A deviation greater than 40% downward triggers a P1 alert 
+requiring immediate investigation.
+
+Silent drops, defined as cases where rows_processed is less than 95% 
+of rows_ingested in the pipeline run log, must be investigated and 
+resolved within 2 business hours. Any silent drop exceeding 10% of 
+daily volume must be reported to the Head of Data.
+
+NULL RATE STANDARDS
+No production column classified as NOT NULL in the data contract may 
+exceed a 1% null rate in the transformed layer. The customer_dest 
+field is classified as NOT NULL per the payment data contract v3.2. 
+Any null rate above 2% in this field triggers an automatic P1 schema 
+drift incident.
+
+DUPLICATE RECORD STANDARDS
+The acceptable duplicate rate for payment transactions is below 0.1%. 
+Any duplicate rate above 0.5% must be investigated. Duplicates above 
+1% require a full pipeline audit and rollback assessment.
+
+VALUE RANGE STANDARDS
+Transaction amounts must fall within statistically expected bounds. 
+Any transaction amount exceeding 100 times the 95th percentile of 
+the prior 30-day distribution is flagged for manual review. Amounts 
+exceeding 1000 times the 95th percentile are classified as data 
+corruption and the batch must be quarantined.

@@ -1,0 +1,54 @@
+DataSentinel Pipeline Architecture Reference
+Version 1.4 | Engineering Team | November 2023
+
+PIPELINE OVERVIEW
+The payment analytics pipeline consists of four layers in sequence:
+
+Layer 1 — Raw Ingestion (raw_transactions table)
+Source: Payment processor API and mobile money transaction logs
+Schedule: Continuous ingestion, micro-batch every 15 minutes
+Owner: Data Engineering team
+Key fields: transaction_id, step, transaction_type, amount, 
+customer_origin, customer_dest, balance fields, fraud labels
+
+Layer 2 — Transformation (transformed_transactions table)
+Depends on: raw_transactions
+Schedule: Runs 30 minutes after each raw ingestion batch completes
+Transformations applied: column renaming, derived fields 
+(balance_delta, amount_bucket, is_balance_mismatch), 
+data type enforcement, null handling, deduplication check
+Pipeline version is stamped on every row for lineage tracking
+
+Layer 3 — Aggregation (aggregated_metrics table)
+Depends on: transformed_transactions
+Schedule: Runs hourly, computes daily KPIs per transaction type
+Key metrics: total_transactions, total_volume, 
+avg_transaction_value, fraud_count, fraud_rate, success_rate
+
+Layer 4 — Audit (pipeline_run_logs table)
+Every pipeline execution writes a log record including:
+rows_ingested, rows_processed, rows_dropped, status, 
+pipeline_version, error_message (null if silent failure)
+
+DATA LINEAGE RULES
+If aggregated_metrics shows anomalous values:
+  Check transformed_transactions for data integrity issues first
+  Then check raw_transactions for source data problems
+  Then check pipeline_run_logs for execution anomalies
+
+If transformed_transactions has null rate increases:
+  Check the pipeline_version column — version changes often 
+  accompany upstream API schema changes
+  Cross-reference the run timestamp in pipeline_run_logs
+
+If pipeline_run_logs shows PARTIAL status:
+  This is always a P1 incident regardless of drop volume
+  Check rows_dropped / rows_ingested for severity
+  Escalate immediately to data engineering lead
+
+ROLLBACK PROCEDURE
+To rollback a bad transformation run:
+1. Identify the last clean pipeline_version from run logs
+2. Re-run quality_issues.py with that version targeting raw_transactions
+3. Rebuild aggregated_metrics from the clean transformed layer
+4. Notify all dashboard consumers of the maintenance window

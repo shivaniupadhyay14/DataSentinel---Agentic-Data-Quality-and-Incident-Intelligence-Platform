@@ -1,0 +1,75 @@
+DataSentinel Incident History Log
+Last updated: December 2023
+
+INCIDENT INC-2023-089 | Severity: P1 | Resolved
+Date: September 14, 2023
+Issue type: Schema drift — customer_dest null rate spiked to 38%
+Root cause: The merchant onboarding API (v2.4) dropped the 
+destination_merchant_id field from its response payload after an 
+unannounced upstream schema change. The payment ingestion pipeline 
+did not validate the field presence before writing to the transformed 
+layer, causing all transactions processed after 02:14 AM to have 
+null customer_dest values.
+Resolution: Pipeline was rolled back to API v2.3 within 3 hours. 
+A schema validation step was added at ingestion to check for 
+required field presence before committing a batch. 
+Business impact: 47,832 transactions affected. Merchant attribution 
+reports were unreliable for a 6-hour window. No revenue impact as 
+transactions themselves were valid.
+Lesson learned: Always validate upstream API response schema on 
+every ingestion run, not just during initial integration.
+
+INCIDENT INC-2023-071 | Severity: P1 | Resolved
+Date: July 3, 2023
+Issue type: Silent row drop — 52% of daily volume missing
+Root cause: A memory limit was breached in the parallel batch 
+transformation job running on the GCP Dataflow worker. Batches 
+that exceeded 2GB were silently skipped rather than retried, 
+because the error handler was misconfigured to treat OOM errors 
+as warnings rather than failures. The pipeline status reported 
+SUCCESS despite processing only 48% of the day's transactions.
+Resolution: Memory limits on Dataflow workers increased from 4GB 
+to 16GB. Error handler reconfigured to treat all OOM events as 
+hard failures that halt the pipeline. A reconciliation check 
+comparing rows_ingested to rows_processed was added to the 
+post-run validation step.
+Business impact: Revenue dashboard understated daily volume by 
+approximately Rs 8.2 crore for a 14-hour window. Three business 
+decisions made during this window were later reviewed and corrected.
+Lesson learned: Never treat memory errors as warnings in batch 
+processing jobs. Always implement post-run row count reconciliation.
+
+INCIDENT INC-2023-044 | Severity: P2 | Resolved
+Date: March 22, 2023
+Issue type: Duplicate records — 2.1% duplicate rate detected
+Root cause: A pipeline retry mechanism was triggered after a 
+transient network timeout. The retry logic did not implement an 
+idempotency key, meaning the same batch of 9,400 transactions 
+was inserted twice into the transformed layer. The duplicates 
+had different transaction_ids but identical business key fields.
+Resolution: Idempotency keys based on a hash of origin account, 
+destination account, amount, and step were implemented. The 
+deduplication check now runs as the first step in every pipeline 
+execution before any writes occur.
+Business impact: Transaction count metrics were inflated by 2.1% 
+for approximately 8 hours. Fraud rate appeared artificially lower 
+than actual during this window.
+Lesson learned: Always implement idempotency keys in any pipeline 
+that has retry logic. Treat retry-on-failure as a data integrity 
+risk, not just a reliability mechanism.
+
+INCIDENT INC-2023-012 | Severity: P2 | Resolved
+Date: January 11, 2023
+Issue type: Value anomaly — currency conversion multiplier bug
+Root cause: A code change to the amount normalisation function 
+used the wrong multiplier constant, multiplying paise values by 
+1000 instead of dividing by 100. The error affected the TRANSFER 
+transaction type only, as other types used a different code path.
+Resolution: Affected records were identified using a statistical 
+outlier check and quarantined. The normalisation function was 
+corrected and the affected batch was reprocessed from the raw layer.
+Business impact: Average transaction value metrics were skewed 
+significantly for 4 hours. No downstream payment processing was 
+affected as this was an analytics pipeline only.
+Lesson learned: Amount normalisation logic must have unit tests 
+covering boundary values and all transaction types.
