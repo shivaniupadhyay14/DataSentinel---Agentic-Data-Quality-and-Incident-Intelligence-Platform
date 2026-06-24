@@ -21,8 +21,7 @@ opens a dashboard.
 
 ## Architecture
 
-<img width="1821" height="2901" alt="paysim_architecture" src="https://github.com/user-attachments/assets/2caeb247-ca01-4f99-b0bc-725630ac5c5f" />
-
+<img width="1000" height="1330" alt="architecture_diagram" src="https://github.com/user-attachments/assets/aa146ed3-4a53-4ee8-aa11-fe2e5588f84f" />
 
 
 ## Detection Capabilities
