@@ -49,7 +49,7 @@ opens a dashboard.
 ## Run Locally
 
 ```bash
-git clone https://github.com/YOURUSERNAME/datasentinel.git
+git clone https://github.com/shivaniupadhyay14/datasentinel.git
 cd datasentinel
 pip install -r requirements.txt
 streamlit run app.py
