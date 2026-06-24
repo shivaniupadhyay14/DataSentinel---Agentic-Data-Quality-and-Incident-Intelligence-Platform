@@ -19,11 +19,11 @@ failure, traces root cause through data lineage, quantifies business impact
 in rupee terms, and generates plain-English incident reports — before anyone 
 opens a dashboard.
 
-**Live demo:** [link here]
-
 ## Architecture
 
-[insert architecture diagram image here]
+<img width="1821" height="2901" alt="paysim_architecture" src="https://github.com/user-attachments/assets/2caeb247-ca01-4f99-b0bc-725630ac5c5f" />
+
+
 
 ## Detection Capabilities
 
